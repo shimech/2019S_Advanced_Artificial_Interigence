@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.datasets import fetch_mldata
 from sklearn.model_selection import train_test_split
 
+
 # カレントディレクトリのパス
 CURRENT_DIR = os.getcwd()
 # データを保存するディレクトリのパス
@@ -14,15 +15,15 @@ TEST_SIZE = 0.2
 # ランダムシード値
 RANDOM_STATE = 2
 # シグモイド関数のパラメータ
-ALPHA = 4.0
-# 重みの初期値の大きさ
-W_AMPLITUDE = 0.1
+ALPHA = 3.0
 # 学習係数
-LEARNING_RATE = 0.5
+LEARNING_RATE = 1.0
 # バッチ数
 BATCH_SIZE = 100
 # エポック数
 NUM_EPOCH = 20
+# 各層のノード数
+NUM_NODE = [784, 1024, 1024, NUM_LABEL]
 
 
 class Sigmoid:
@@ -77,7 +78,7 @@ class Linear:
             activation: 活性化関数
         """
         self.W = np.random.randn(in_dim, out_dim) / np.sqrt(in_dim)
-        self.b = np.zeros(out_dim)
+        self.b = np.random.randn(out_dim) / np.sqrt(in_dim)
         self.activation = activation()
         self.delta = None
         self.x = None
@@ -128,12 +129,11 @@ class MLP:
         self.layers[-1].db = np.dot(np.ones(len(self.layers[-1].x)), self.layers[-1].delta)
         dout = np.dot(self.layers[-1].delta, self.layers[-1].W.T)
         # 3.1.2. 最終層のパラメータ更新
-        self.layers[-1].W -= lr * self.layers[-1].dW  # self.layers[-1].dW を用いて最終層の重みを更新しよう
-        self.layers[-1].b -= lr * self.layers[-1].db  # self.layers[-1].db を用いて最終層のバイアスを更新しよう
-        # 3.2. 中間層
+        self.layers[-1].W -= lr * self.layers[-1].dW
+        self.layers[-1].b -= lr * self.layers[-1].db
         for layer in self.layers[-2::-1]:
             # 3.2.1. 中間層の誤差・勾配計算
-            dout = layer.backward(dout)  # 逆伝播計算を順番に実行しよう
+            dout = layer.backward(dout)
             # 3.2.2. パラメータの更新
             layer.W -= lr * layer.dW # 各層の重みを更新
             layer.b -= lr * layer.db  # 各層のバイアスを更新
@@ -154,14 +154,14 @@ def main() -> None:
     """ main関数 """
     X, y = load_data()
     X_train, X_test, Y_train, Y_test = reshape_data(X, y)
-    model = MLP([Linear(X.shape[1], 1000, Sigmoid),
-                 Linear(1000, 1000, Sigmoid),
-                 Linear(1000, NUM_LABEL, Softmax)
+    model = MLP([Linear(NUM_NODE[0], NUM_NODE[1], ReLU),
+                 Linear(NUM_NODE[1], NUM_NODE[2], ReLU),
+                 Linear(NUM_NODE[2], NUM_NODE[3], Softmax)
                 ])
     for epoch in range(NUM_EPOCH):
         index = np.random.permutation(len(X_train))
-        model, loss_train, accuracy_train = train_test_model(model, X_train, Y_train, index, mode='train')
-        model, loss_test, accuracy_test = train_test_model(model, X_test, Y_test, index, mode='test')
+        model, loss_train, accuracy_train = train_test_model(model, X_train, Y_train, index, epoch, mode='train')
+        model, loss_test, accuracy_test = train_test_model(model, X_test, Y_test, index, epoch, mode='test')
         print('{} / {} epoch | TRAIN loss: {:.4f}, accuracy: {:.2%} | TEST loss: {:.4f}, accuracy: {:.2%}'.format(epoch+1, NUM_EPOCH, loss_train, accuracy_train, loss_test, accuracy_test))
 
 
@@ -204,15 +204,30 @@ def reshape_data(X: np.ndarray, y: np.ndarray, test_size: float=TEST_SIZE, rando
     return X_train, X_test, Y_train, Y_test
 
 
-def train_test_model(model, X: np.ndarray, Y: np.ndarray, index: np.ndarray,
+def train_test_model(model: MLP, X: np.ndarray, Y: np.ndarray, index: np.ndarray, epoch: int,
                      batch_size: int=BATCH_SIZE, mode: str='train') -> (MLP, float, float):
+    """
+    モデルを学習する・テストする
+    @param:
+        model: モデル
+        X: 説明変数 (データ数, 784)
+        Y: 目的変数 (データ数, 10)
+        index: 学習の際、用いるデータのインデックス
+        epoch: 現在のエポック数
+        batch_size: バッチ数 (= BATCH_SIZE)
+        mode: train or test (= 'train')
+    @return:
+        model: モデル
+        loss: 誤差
+        accuracy: 正答率
+    """
     sum_loss = 0
     y_pred = []
     for i in range(0, len(X), batch_size):
         if mode == 'train':
             X_ = X[index[i:i+batch_size]]
             T_ = Y[index[i:i+batch_size]]
-            sum_loss += model.train(X_, T_) * len(X_)
+            sum_loss += model.train(X_, T_, lr=LEARNING_RATE * 0.9 ** epoch) * len(X_)
         else:
             X_ = X[i:i+batch_size]
             T_ = Y[i:i+batch_size]
