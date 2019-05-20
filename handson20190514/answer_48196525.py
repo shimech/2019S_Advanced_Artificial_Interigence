@@ -16,10 +16,12 @@ TEST_SIZE = 0.2
 RANDOM_STATE = 2
 # シグモイド関数のパラメータ
 ALPHA = 3.0
+# LeakyReLUのパラメータ
+BETA = 0.05
 # 学習係数
-LEARNING_RATE = 1.0
+LEARNING_RATE = 0.7
 # バッチ数
-BATCH_SIZE = 100
+BATCH_SIZE = 50
 # エポック数
 NUM_EPOCH = 20
 # 各層のノード数
@@ -53,6 +55,20 @@ class ReLU:
 
     def backward(self) -> np.ndarray:
         return np.where(self.x > 0, 1, 0)
+
+
+class LeakyReLU:
+    """ LeakyReLU関数 """
+    def __init__(self, beta: float=BETA) -> None:
+        self.x = None
+        self.beta = beta
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        self.x = x
+        return np.maximum(self.beta * x, x)
+
+    def backward(self) -> np.ndarray:
+        return np.where(self.x > 0, 1, self.beta)
 
 
 class Softmax:
@@ -154,8 +170,8 @@ def main() -> None:
     """ main関数 """
     X, y = load_data()
     X_train, X_test, Y_train, Y_test = reshape_data(X, y)
-    model = MLP([Linear(NUM_NODE[0], NUM_NODE[1], ReLU),
-                 Linear(NUM_NODE[1], NUM_NODE[2], ReLU),
+    model = MLP([Linear(NUM_NODE[0], NUM_NODE[1], LeakyReLU),
+                 Linear(NUM_NODE[1], NUM_NODE[2], LeakyReLU),
                  Linear(NUM_NODE[2], NUM_NODE[3], Softmax)
                 ])
     for epoch in range(NUM_EPOCH):
@@ -227,7 +243,7 @@ def train_test_model(model: MLP, X: np.ndarray, Y: np.ndarray, index: np.ndarray
         if mode == 'train':
             X_ = X[index[i:i+batch_size]]
             T_ = Y[index[i:i+batch_size]]
-            sum_loss += model.train(X_, T_, lr=LEARNING_RATE * 0.9 ** epoch) * len(X_)
+            sum_loss += model.train(X_, T_, lr=LEARNING_RATE * 0.95 ** epoch) * len(X_)
         else:
             X_ = X[i:i+batch_size]
             T_ = Y[i:i+batch_size]
